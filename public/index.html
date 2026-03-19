@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PPhim — Sync Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: #0a0e17; color: #e0e6f0; font-family: 'Segoe UI', sans-serif; 
+            min-height: 100vh; padding: 20px;
+        }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { font-size: 1.6rem; background: linear-gradient(135deg, #6366f1, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .header p { color: #6b7280; font-size: 0.85rem; margin-top: 4px; }
+
+        /* Stats Grid */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .stat-card { 
+            background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 16px; text-align: center;
+            transition: border-color 0.3s;
+        }
+        .stat-card:hover { border-color: #6366f1; }
+        .stat-card .value { font-size: 1.8rem; font-weight: 700; color: #fff; }
+        .stat-card .label { font-size: 0.75rem; color: #6b7280; margin-top: 4px; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-card.synced .value { color: #22c55e; }
+        .stat-card.skipped .value { color: #eab308; }
+        .stat-card.failed .value { color: #ef4444; }
+        .stat-card.saved .value { color: #6366f1; }
+
+        /* Progress */
+        .progress-section { margin-bottom: 20px; }
+        .progress-bar-bg { 
+            background: #1f2937; border-radius: 10px; height: 28px; overflow: hidden; position: relative;
+        }
+        .progress-bar-fill { 
+            height: 100%; border-radius: 10px; transition: width 0.5s ease;
+            background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; font-weight: 600; color: #fff; min-width: 40px;
+        }
+        .progress-info { display: flex; justify-content: space-between; margin-top: 6px; font-size: 0.8rem; color: #6b7280; }
+
+        /* Status Badge */
+        .status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+        .status-badge { 
+            padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+        }
+        .status-badge.running { background: #064e3b; color: #34d399; animation: pulse 1.5s infinite; }
+        .status-badge.idle { background: #1e293b; color: #94a3b8; }
+        .status-badge.done { background: #1e3a5f; color: #60a5fa; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+        /* Buttons */
+        .btn-group { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .btn { 
+            padding: 10px 24px; border: none; border-radius: 10px; font-size: 0.9rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+        }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-start { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; }
+        .btn-start:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(34,197,94,0.3); }
+        .btn-stop { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; }
+        .btn-stop:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(239,68,68,0.3); }
+        .btn-clear { background: #1f2937; color: #f59e0b; border: 1px solid #374151; }
+        .btn-clear:hover:not(:disabled) { background: #374151; }
+
+        /* Log Console */
+        .log-section h3 { font-size: 0.9rem; color: #9ca3af; margin-bottom: 8px; }
+        .log-console { 
+            background: #030712; border: 1px solid #1f2937; border-radius: 10px; padding: 14px;
+            height: 340px; overflow-y: auto; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.78rem;
+            line-height: 1.6;
+        }
+        .log-console::-webkit-scrollbar { width: 6px; }
+        .log-console::-webkit-scrollbar-track { background: transparent; }
+        .log-console::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        .log-line { color: #9ca3af; }
+        .log-line.success { color: #22c55e; }
+        .log-line.warn { color: #f59e0b; }
+        .log-line.info { color: #60a5fa; }
+        .log-line.special { color: #a78bfa; }
+
+        /* R2 info */
+        .r2-info { 
+            background: #111827; border: 1px solid #1f2937; border-radius: 12px; 
+            padding: 14px 18px; margin-bottom: 20px; font-size: 0.85rem; color: #6b7280;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .r2-info .count { color: #a78bfa; font-weight: 700; font-size: 1.1rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🖼️ PPhim Sync Dashboard</h1>
+        <p>Theo dõi tiến độ đồng bộ ảnh WebP lên Cloudflare R2</p>
+    </div>
+
+    <div class="status-row">
+        <span id="statusBadge" class="status-badge idle">⏸️ Chờ lệnh</span>
+        <span id="elapsed" style="font-size:0.8rem; color:#6b7280;"></span>
+    </div>
+
+    <div class="r2-info">
+        📦 Tổng ảnh đang có trên R2: <span id="totalR2" class="count">0</span>
+    </div>
+
+    <div class="stats">
+        <div class="stat-card"><div class="value" id="sTotal">0</div><div class="label">Đã xử lý</div></div>
+        <div class="stat-card synced"><div class="value" id="sSynced">0</div><div class="label">✅ Đã sync</div></div>
+        <div class="stat-card skipped"><div class="value" id="sSkipped">0</div><div class="label">⏭️ Bỏ qua</div></div>
+        <div class="stat-card failed"><div class="value" id="sFailed">0</div><div class="label">❌ Lỗi</div></div>
+        <div class="stat-card saved"><div class="value" id="sSaved">0</div><div class="label">💾 Tiết kiệm</div></div>
+    </div>
+
+    <div class="progress-section">
+        <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="progressBar" style="width: 0%">0%</div>
+        </div>
+        <div class="progress-info">
+            <span id="pageInfo">Trang 0 / 0</span>
+            <span id="timeLeft"></span>
+        </div>
+    </div>
+
+    <div class="btn-group">
+        <button class="btn btn-start" id="btnStart" onclick="startSync()">▶️ Bắt đầu Sync</button>
+        <button class="btn btn-stop" id="btnStop" onclick="stopSync()" disabled>⏹ Dừng</button>
+        <button class="btn btn-clear" id="btnClear" onclick="clearAll()">🗑️ Xóa sạch R2</button>
+    </div>
+
+    <div class="log-section">
+        <h3>📋 Console Log</h3>
+        <div class="log-console" id="logConsole">
+            <div class="log-line info">Sẵn sàng. Bấm "Bắt đầu Sync" để chạy.</div>
+        </div>
+    </div>
+
+    <script>
+        let pollInterval = null;
+
+        function formatTime(ms) {
+            const s = Math.floor(ms / 1000);
+            const m = Math.floor(s / 60);
+            const h = Math.floor(m / 60);
+            if (h > 0) return `${h}h ${m%60}p ${s%60}s`;
+            if (m > 0) return `${m}p ${s%60}s`;
+            return `${s}s`;
+        }
+
+        function classifyLog(text) {
+            if (text.includes('✅')) return 'success';
+            if (text.includes('⚠️') || text.includes('❌')) return 'warn';
+            if (text.includes('📄') || text.includes('🚀') || text.includes('🎉')) return 'info';
+            if (text.includes('📊')) return 'special';
+            return '';
+        }
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const d = await res.json();
+
+                // Status badge
+                const badge = document.getElementById('statusBadge');
+                if (d.isRunning) {
+                    badge.className = 'status-badge running';
+                    badge.textContent = '🔄 Đang chạy...';
+                } else if (d.stats.synced > 0) {
+                    badge.className = 'status-badge done';
+                    badge.textContent = '✅ Hoàn thành';
+                } else {
+                    badge.className = 'status-badge idle';
+                    badge.textContent = '⏸️ Chờ lệnh';
+                }
+
+                // Elapsed
+                if (d.startedAt) {
+                    document.getElementById('elapsed').textContent = '⏱️ ' + formatTime(Date.now() - d.startedAt);
+                }
+
+                // R2 total
+                document.getElementById('totalR2').textContent = d.totalOnR2.toLocaleString();
+
+                // Stats
+                document.getElementById('sTotal').textContent = d.stats.total.toLocaleString();
+                document.getElementById('sSynced').textContent = d.stats.synced.toLocaleString();
+                document.getElementById('sSkipped').textContent = d.stats.skipped.toLocaleString();
+                document.getElementById('sFailed').textContent = d.stats.failed.toLocaleString();
+                document.getElementById('sSaved').textContent = (d.stats.savedKB / 1024).toFixed(1) + ' MB';
+
+                // Progress
+                const pct = d.totalPages > 0 ? Math.round((d.currentPage / d.totalPages) * 100) : 0;
+                document.getElementById('progressBar').style.width = pct + '%';
+                document.getElementById('progressBar').textContent = pct + '%';
+                document.getElementById('pageInfo').textContent = `Trang ${d.currentPage} / ${d.totalPages}`;
+
+                // Buttons
+                document.getElementById('btnStart').disabled = d.isRunning;
+                document.getElementById('btnStop').disabled = !d.isRunning;
+                document.getElementById('btnClear').disabled = d.isRunning;
+
+                // Logs
+                const logEl = document.getElementById('logConsole');
+                if (d.logs.length > 0) {
+                    logEl.innerHTML = d.logs.map(l => `<div class="log-line ${classifyLog(l)}">${l}</div>`).join('');
+                    logEl.scrollTop = logEl.scrollHeight;
+                }
+
+                // Auto-stop polling khi done
+                if (!d.isRunning && pollInterval) {
+                    // Giữ polling chậm khi idle
+                    clearInterval(pollInterval);
+                    pollInterval = setInterval(fetchStatus, 5000);
+                }
+            } catch(e) {}
+        }
+
+        async function startSync() {
+            const res = await fetch('/api/start', { method: 'POST' });
+            const d = await res.json();
+            if (d.ok) {
+                if (pollInterval) clearInterval(pollInterval);
+                pollInterval = setInterval(fetchStatus, 1500);
+                fetchStatus();
+            } else { alert(d.msg); }
+        }
+
+        async function stopSync() {
+            const res = await fetch('/api/stop', { method: 'POST' });
+            const d = await res.json();
+            if (!d.ok) alert(d.msg);
+        }
+
+        async function clearAll() {
+            if (!confirm('⚠️ Xóa TOÀN BỘ ảnh trên R2 và MongoDB?\nHành động này không thể hoàn tác!')) return;
+            document.getElementById('btnClear').textContent = '⏳ Đang xóa...';
+            document.getElementById('btnClear').disabled = true;
+            const res = await fetch('/api/clear', { method: 'POST' });
+            const d = await res.json();
+            alert(d.msg);
+            document.getElementById('btnClear').textContent = '🗑️ Xóa sạch R2';
+            document.getElementById('btnClear').disabled = false;
+            fetchStatus();
+        }
+
+        // Initial fetch + slow poll
+        fetchStatus();
+        pollInterval = setInterval(fetchStatus, 5000);
+    </script>
+</body>
+</html>
